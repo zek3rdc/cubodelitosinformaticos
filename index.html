@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cubo Interactivo de Delitos Informáticos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a202c; /* bg-gray-900 */
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            color: white;
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="info" class="px-4">
+    <h1 class="text-2xl md:text-4xl font-bold mb-2">Cubo de Delitos Informáticos</h1>
+    <p class="text-sm md:text-base">Arrastra el mouse para girar el cubo y ver los diferentes temas.</p>
+</div>
+
+<script>
+    // --- Configuración de la Escena ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // --- Luces ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 10, 7.5);
+    scene.add(directionalLight);
+
+    // --- Texturas para cada cara del cubo ---
+    // Esta función crea una textura de lienzo a partir de un texto.
+    function createTextTexture(text, bgColor, textColor) {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 512;
+
+        // Color de fondo
+        context.fillStyle = bgColor;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Estilo del texto
+        context.font = 'bold 32px Inter, sans-serif';
+        context.fillStyle = textColor;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        
+        // Función para envolver el texto si es demasiado largo
+        function wrapText(context, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            let testLine;
+            let metrics;
+            let testWidth;
+            const lines = [];
+
+            for (let n = 0; n < words.length; n++) {
+                testLine = line + words[n] + ' ';
+                metrics = context.measureText(testLine);
+                testWidth = metrics.width;
+                if (testWidth > maxWidth && n > 0) {
+                    lines.push(line);
+                    line = words[n] + ' ';
+                } else {
+                    line = testLine;
+                }
+            }
+            lines.push(line);
+            
+            const startY = y - (lines.length - 1) * lineHeight / 2;
+
+            for (let k = 0; k < lines.length; k++) {
+                context.fillText(lines[k], x, startY + k * lineHeight);
+            }
+        }
+
+        wrapText(context, text, canvas.width / 2, canvas.height / 2, 480, 40);
+
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    // Contenido de cada cara del cubo
+    const faceContents = [
+        { text: 'Delitos Contra los Sistemas: Acceso indebido, sabotaje y espionaje informático. (Ley Especial Contra los Delitos Informáticos, Venezuela).', bgColor: '#2d3748', textColor: '#ffffff' }, // gray-800
+        { text: 'Delitos Contra la Propiedad: Hurto, fraude y uso fraudulento de tarjetas inteligentes. (Ley Especial Contra los Delitos Informáticos, Venezuela).', bgColor: '#4a5568', textColor: '#ffffff' }, // gray-700
+        { text: 'Delitos Contra la Privacidad: Violación de datos personales y comunicaciones privadas. (Ley Especial Contra los Delitos Informáticos, Venezuela).', bgColor: '#2d3748', textColor: '#ffffff' },
+        { text: 'Objeto de la Ley: Protección integral de los sistemas con tecnologías de información y la prevención y sanción de delitos informáticos.', bgColor: '#4a5568', textColor: '#ffffff' },
+        { text: 'Phishing: ¡Cuidado con los mensajes falsos! No compartas tus datos. Verifica siempre el remitente antes de hacer clic.', bgColor: '#c53030', textColor: '#ffffff' }, // red-700
+        { text: 'Malware: Software malicioso (virus, spyware) que daña tu equipo y roba información. Usa antivirus y descarga solo de sitios confiables.', bgColor: '#c53030', textColor: '#ffffff' }
+    ];
+
+    const materials = faceContents.map(content => {
+        const texture = createTextTexture(content.text, content.bgColor, content.textColor);
+        return new THREE.MeshLambertMaterial({ map: texture });
+    });
+
+    // --- Creación del Cubo ---
+    const geometry = new THREE.BoxGeometry(3, 3, 3);
+    const cube = new THREE.Mesh(geometry, materials);
+    scene.add(cube);
+
+    camera.position.z = 5;
+
+    // --- Interactividad del Mouse ---
+    let isMouseDown = false;
+    let previousMousePosition = {
+        x: 0,
+        y: 0
+    };
+
+    function onMouseDown(event) {
+        isMouseDown = true;
+    }
+
+    function onMouseUp(event) {
+        isMouseDown = false;
+    }
+
+    function onMouseMove(event) {
+        if (!isMouseDown) {
+            return;
+        }
+
+        const deltaMove = {
+            x: event.offsetX - previousMousePosition.x,
+            y: event.offsetY - previousMousePosition.y
+        };
+
+        const rotateAngleX = deltaMove.y * 0.01;
+        const rotateAngleY = deltaMove.x * 0.01;
+
+        // Aplicar rotación
+        cube.rotation.x += rotateAngleX;
+        cube.rotation.y += rotateAngleY;
+
+        previousMousePosition = {
+            x: event.offsetX,
+            y: event.offsetY
+        };
+    }
+    
+    // --- Eventos Táctiles para Móviles ---
+    function onTouchStart(event) {
+        isMouseDown = true;
+        previousMousePosition.x = event.touches[0].clientX;
+        previousMousePosition.y = event.touches[0].clientY;
+    }
+
+    function onTouchEnd(event) {
+        isMouseDown = false;
+    }
+
+    function onTouchMove(event) {
+        if (!isMouseDown) {
+            return;
+        }
+        event.preventDefault(); // Prevenir el scroll de la página
+        const deltaMove = {
+            x: event.touches[0].clientX - previousMousePosition.x,
+            y: event.touches[0].clientY - previousMousePosition.y
+        };
+
+        const rotateAngleX = deltaMove.y * 0.01;
+        const rotateAngleY = deltaMove.x * 0.01;
+
+        cube.rotation.x += rotateAngleX;
+        cube.rotation.y += rotateAngleY;
+
+        previousMousePosition.x = event.touches[0].clientX;
+        previousMousePosition.y = event.touches[0].clientY;
+    }
+
+
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('mouseup', onMouseUp);
+    renderer.domElement.addEventListener('mousemove', onMouseMove);
+    
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+
+
+    // --- Bucle de Animación ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Rotación automática lenta si el mouse no está presionado
+        if (!isMouseDown) {
+            cube.rotation.x += 0.001;
+            cube.rotation.y += 0.001;
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // --- Manejo del Redimensionamiento de la Ventana ---
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+
+</body>
+</html>
